@@ -10,6 +10,7 @@ import time
 import dlib
 import cv2
 import numpy as np
+from pydbus import SystemBus
 import paths_factory
 
 from i18n import _
@@ -29,6 +30,19 @@ video_capture = VideoCapture(config)
 video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 exposure = config.getint("video", "exposure", fallback=-1)
 dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
+rotate_with_accelerometer = config.getint("video", "rotate_with_accelerometer", fallback=1)
+
+# Read the device orientation, from accelerometer, and compensate the image accordingly.
+orientation = "unknown"
+if rotate_with_accelerometer:
+	try:
+		bus = SystemBus()
+		dev = bus.get("net.hadess.SensorProxy","/net/hadess/SensorProxy")
+
+		if dev.HasAccelerometer:
+			orientation = dev.AccelerometerOrientation
+	except:
+		pass
 
 # Let the user know what's up
 print(_("""
@@ -116,6 +130,31 @@ try:
 
 		# Grab a single frame of video
 		orig_frame, frame = video_capture.read_frame()
+
+		# If the device has an on-board accelerometer, and rotate_with_accelerometer is 1,
+		# then we will rotate the camera image back into a 'normal' orientation.
+		# This allows Howdy to still be used on 2-in-1 laptops, when they are folded upside-down on a desk.
+		if rotate_with_accelerometer == 1:
+			orientation = "unknown"
+
+			try:
+				bus = SystemBus()
+				dev = bus.get("net.hadess.SensorProxy","/net/hadess/SensorProxy")
+
+				if dev.HasAccelerometer:
+					orientation = dev.AccelerometerOrientation
+			except:
+				pass
+
+			# handle rotation!
+			# one of: normal, left-up, right-up, bottom-up, or unknown
+			if orientation == "right-up":
+				frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+			elif orientation == "left-up":
+				frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+			elif orientation == "bottom-up":
+				frame = cv2.rotate(frame, cv2.ROTATE_180)
+
 
 		frame = clahe.apply(frame)
 		# Make a frame to put overlays in

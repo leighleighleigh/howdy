@@ -22,6 +22,7 @@ import atexit
 import subprocess
 import snapshot
 import numpy as np
+from pydbus import SystemBus
 import _thread as thread
 import paths_factory
 from recorders.video_capture import VideoCapture
@@ -148,6 +149,7 @@ save_failed = config.getboolean("snapshots", "save_failed", fallback=False)
 save_successful = config.getboolean("snapshots", "save_successful", fallback=False)
 gtk_stdout = config.getboolean("debug", "gtk_stdout", fallback=False)
 rotate = config.getint("video", "rotate", fallback=0)
+rotate_with_accelerometer = config.getint("video", "rotate_with_accelerometer", fallback=0)
 
 # Send the gtk output to the terminal if enabled in the config
 gtk_pipe = sys.stdout if gtk_stdout else subprocess.DEVNULL
@@ -278,6 +280,34 @@ while True:
 		# Apply that factor to the frame
 		frame = cv2.resize(frame, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
 		gsframe = cv2.resize(gsframe, None, fx=scaling_factor, fy=scaling_factor, interpolation=cv2.INTER_AREA)
+
+	# If the device has an on-board accelerometer, and rotate_with_accelerometer is 1,
+	# then we will rotate the camera image back into a 'normal' orientation.
+	# This allows Howdy to still be used on 2-in-1 laptops, when they are folded upside-down on a desk.
+	if rotate_with_accelerometer == 1:
+		orientation = "unknown"
+
+		try:
+			bus = SystemBus()
+			dev = bus.get("net.hadess.SensorProxy","/net/hadess/SensorProxy")
+
+			if dev.HasAccelerometer:
+				orientation = dev.AccelerometerOrientation
+		except:
+			pass
+
+		# handle rotation!
+		# one of: normal, left-up, right-up, bottom-up, or unknown
+		if orientation == "right-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_CLOCKWISE)
+		elif orientation == "left-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_COUNTERCLOCKWISE)
+		elif orientation == "bottom-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_180)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_180)
+
 
 	# If camera is configured to rotate = 1, check portrait in addition to landscape
 	if rotate == 1:
