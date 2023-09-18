@@ -8,6 +8,7 @@ import json
 import configparser
 import builtins
 import numpy as np
+from pydbus import SystemBus
 import paths_factory
 
 from recorders.video_capture import VideoCapture
@@ -133,6 +134,7 @@ dark_running_total = 0
 face_locations = None
 
 dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
+rotate_with_accelerometer = config.getint("video", "rotate_with_accelerometer", fallback=0)
 
 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
 
@@ -143,6 +145,34 @@ while frames < 60:
 	frame, gsframe = video_capture.read_frame()
 	gsframe = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 	gsframe = clahe.apply(gsframe)
+
+	# If the device has an on-board accelerometer, and rotate_with_accelerometer is 1,
+	# then we will rotate the camera image back into a 'normal' orientation.
+	# This allows Howdy to still be used on 2-in-1 laptops, when they are folded upside-down on a desk.
+	if rotate_with_accelerometer == 1:
+		orientation = "unknown"
+
+		try:
+			bus = SystemBus()
+			dev = bus.get("net.hadess.SensorProxy","/net/hadess/SensorProxy")
+
+			if dev.HasAccelerometer:
+				orientation = dev.AccelerometerOrientation
+		except:
+			pass
+
+		# handle rotation!
+		# one of: normal, left-up, right-up, bottom-up, or unknown
+		if orientation == "right-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_CLOCKWISE)
+		elif orientation == "left-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_90_COUNTERCLOCKWISE)
+		elif orientation == "bottom-up":
+			frame = cv2.rotate(frame, cv2.ROTATE_180)
+			gsframe = cv2.rotate(gsframe, cv2.ROTATE_180)
+
 
 	# Create a histogram of the image with 8 values
 	hist = cv2.calcHist([gsframe], [0], None, [8], [0, 256])
