@@ -30,19 +30,7 @@ video_capture = VideoCapture(config)
 video_certainty = config.getfloat("video", "certainty", fallback=3.5) / 10
 exposure = config.getint("video", "exposure", fallback=-1)
 dark_threshold = config.getfloat("video", "dark_threshold", fallback=60)
-rotate_with_accelerometer = config.getint("video", "rotate_with_accelerometer", fallback=1)
-
-# Read the device orientation, from accelerometer, and compensate the image accordingly.
-orientation = "unknown"
-if rotate_with_accelerometer:
-	try:
-		bus = SystemBus()
-		dev = bus.get("net.hadess.SensorProxy","/net/hadess/SensorProxy")
-
-		if dev.HasAccelerometer:
-			orientation = dev.AccelerometerOrientation
-	except:
-		pass
+rotate_with_accelerometer = config.getint("video", "rotate_with_accelerometer", fallback=0)
 
 # Let the user know what's up
 print(_("""
